@@ -15,4 +15,4 @@ data/
 notebook/data.yaml
 reports/runs/**/weights/
 reports/runs/**/*.jpg
-reports/runs/**/labels.cache
+reports/runs/**/labels.cache.venv-app/
