@@ -1,0 +1,2 @@
+Model,Precision,Recall,mAP50,mAP50-95,Inference Time (ms),FPS,Model Size (MB),Device,Epochs,Image Size
+YOLOv8s,0.6711,0.6342,0.6595,0.5056,2.67,54.54,21.48,mps,25,640

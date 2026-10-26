@@ -1,0 +1,4 @@
+class,precision,recall,mAP50,mAP50-95
+Head_without_helmet,0.8472,0.7833,0.8653,0.6534
+Helmet_only,0.2596,0.2105,0.1569,0.129
+Helmet_with_head,0.9065,0.9087,0.9565,0.7343

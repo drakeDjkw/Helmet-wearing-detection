@@ -1,0 +1,18 @@
+# Environment
+.venv/
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+.DS_Store
+
+# Data (download separately)
+data/
+
+# Model weights
+*.pt
+
+# Generated
+notebook/data.yaml
+reports/runs/**/weights/
+reports/runs/**/*.jpg
+reports/runs/**/labels.cache
