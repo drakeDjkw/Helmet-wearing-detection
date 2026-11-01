@@ -174,9 +174,9 @@ Each frame gets one of four statuses, following [`docs/project_decisions.md`](do
 
 Inputs that cannot be read (empty files, non-image files, images smaller than 32 px) are rejected with a reason. Both cutoffs are provisional and are set with sliders in the app.
 
-## Lab 04 inference demo
+## inference demo
 
-The demo sends one site image through the Lab 02 YOLOv8s baseline and the same
+The demo sends one site image through the YOLOv8s baseline and the same
 status rules the app uses (`app/helmet_utils.py`). It records two attempts: a
 normal one and a simulated "inference unavailable" one.
 
