@@ -88,15 +88,18 @@ Helmet-wearing-detection/
 ├── docs/
 │   ├── project_brief.md                  # user, task, data and first results
 │   ├── split_strategy.md                 # how data is split and evaluated
-│   └── project_decisions.md              # Lab 03: required behaviour, acceptance check
+│   ├── project_decisions.md              # Lab 03: required behaviour, acceptance check
+│   └── inference_architecture.drawio     # Lab 04: inference path diagram
 ├── models/                               # not in Git: put helmet_yolov8s.pt here
 ├── notebook/
 │   └── Helmet_wear_detection.ipynb       # EDA, sampling, training, evaluation
 ├── reports/
 │   ├── baseline_metrics.json             # baseline test metrics
+│   ├── inference_demo.jsonl              # Lab 04: records written by the demo
 │   └── runs/detect/                      # curves, confusion matrices, predictions
 ├── src/
-│   └── baseline_pipeline.py              # end-to-end baseline as one script
+│   ├── baseline_pipeline.py              # end-to-end baseline as one script
+│   └── inference_demo.py                 # Lab 04: one-image inference demo
 ├── requirements.txt
 └── README.md
 ```
@@ -170,6 +173,44 @@ Each frame gets one of four statuses, following [`docs/project_decisions.md`](do
 | **Compliant** | All detected heads wear helmets |
 
 Inputs that cannot be read (empty files, non-image files, images smaller than 32 px) are rejected with a reason. Both cutoffs are provisional and are set with sliders in the app.
+
+## Lab 04 inference demo
+
+The demo sends one site image through the Lab 02 YOLOv8s baseline and the same
+status rules the app uses (`app/helmet_utils.py`). It records two attempts: a
+normal one and a simulated "inference unavailable" one.
+
+It needs the trained weights at `models/helmet_yolov8s.pt` (see
+[Run the app](#run-the-app)) or `reports/runs/detect/YOLOv8s/weights/best.pt`.
+Use `--weights` to point to another file. Install both requirement files
+first, because the demo imports `app/helmet_utils.py`, which uses Streamlit.
+
+From the repository root:
+
+```bash
+python src/inference_demo.py --input-ref data/WearHelmetDetection.v1i.yolov8/test/images/hard_hat_workers1116_png.rf.7cc65945da90d7396b636cd982363c8a.jpg
+```
+
+This creates **`reports/inference_demo.jsonl`** with two lines:
+
+| Line | status | simulated | action |
+|---|---|---|---|
+| 1 | `ok` (VIOLATION, COMPLIANT or NO_PEOPLE) | `false` | show frame status to the safety officer; alert if VIOLATION |
+| 1 | `review` (UNCERTAIN, or input rejected) | `false` | put frame in the safety officer's review queue (check by eye) |
+| 2 | `unavailable` | `true` | show 'detection offline' and check the area by eye |
+
+**Decision rule (`decision-v1`, provisional):**
+
+- A `Head_without_helmet` box at 0.50 or more makes the frame a VIOLATION.
+- A box between 0.25 and 0.50, or one head with both labels, makes it
+  UNCERTAIN, which goes to review.
+- `Helmet_only` is not used for alerts.
+- An input that fails the check (empty, not an image, under 32 px) is
+  rejected with a reason and goes to review.
+
+The path is drawn in
+[`docs/inference_architecture.drawio`](docs/inference_architecture.drawio);
+open it at <https://app.diagrams.net>.
 
 ## Next steps
 
