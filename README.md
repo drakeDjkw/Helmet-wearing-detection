@@ -88,18 +88,18 @@ Helmet-wearing-detection/
 ├── docs/
 │   ├── project_brief.md                  # user, task, data and first results
 │   ├── split_strategy.md                 # how data is split and evaluated
-│   ├── project_decisions.md              # Lab 03: required behaviour, acceptance check
-│   └── inference_architecture.drawio     # Lab 04: inference path diagram
+│   ├── project_decisions.md              # required behaviour, acceptance check
+│   └── inference_architecture.drawio     # inference path diagram
 ├── models/                               # not in Git: put helmet_yolov8s.pt here
 ├── notebook/
 │   └── Helmet_wear_detection.ipynb       # EDA, sampling, training, evaluation
 ├── reports/
 │   ├── baseline_metrics.json             # baseline test metrics
-│   ├── inference_demo.jsonl              # Lab 04: records written by the demo
+│   ├── inference_demo.jsonl              # records written by the demo
 │   └── runs/detect/                      # curves, confusion matrices, predictions
 ├── src/
 │   ├── baseline_pipeline.py              # end-to-end baseline as one script
-│   └── inference_demo.py                 # Lab 04: one-image inference demo
+│   └── inference_demo.py                 # one-image inference demo
 ├── requirements.txt
 └── README.md
 ```
