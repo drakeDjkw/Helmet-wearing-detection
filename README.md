@@ -252,10 +252,10 @@ Decoding is still checked inside `project_predict()`.
 | Rule | Kind | Fails as | Why |
 |---|---|---|---|
 | `input_reference_present` | structural | error | prediction needs a reference |
-| `format_supported` | structural | error | normal input is JPG or PNG (Lab 03) |
+| `format_supported` | structural | error | normal input is JPG or PNG |
 | `dimensions_minimum` | structural | error | the app rejects images under 32 px |
 | `source_registered` | project-specific | error | an unknown source cannot be traced |
-| `source_evaluated` | review | warning | frames from unevaluated sources go to the officer (Lab 03 failure cases) |
+| `source_evaluated` | review | warning | frames from unevaluated sources go to the officer (failure cases) |
 | `preprocessing_identity` | structural | error | runtime `letterbox640-v1` must match the contract |
 
 `pass` calls `project_predict()`, `warning` returns `route_for_review` without
