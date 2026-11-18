@@ -165,7 +165,13 @@ if ctx.state.playing:
 
 else:
     st.caption("Start the camera to see live results and alerts.")
-    df = events_table(time.time())
+    with state.lock:
+        # The camera was stopped during an alert: end it at the last processed frame,
+        # so its duration does not keep growing.
+        if state.tracker.current is not None:
+            state.tracker.close(state.last_time)
+        end_ts = state.last_time or time.time()
+    df = events_table(end_ts)
     if not df.empty:
         st.subheader("Alerts from this session")
         st.dataframe(df, width="stretch", hide_index=True)
