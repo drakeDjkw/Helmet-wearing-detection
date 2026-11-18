@@ -101,6 +101,8 @@ Helmet-wearing-detection/
 ├── data/                                 # not in Git
 │   ├── WearHelmetDetection.v1i.yolov8/   # full Roboflow export
 │   └── HWD_SAMPLE/                       # sampled subset (created by the pipeline)
+├── config/
+│   └── input_contract.json               # Lab 05 input contract
 ├── docs/
 │   ├── project_brief.md                  # user, task, data and first results
 │   ├── split_strategy.md                 # how data is split and evaluated
@@ -111,13 +113,17 @@ Helmet-wearing-detection/
 │   └── Helmet_wear_detection.ipynb       # EDA, sampling, training, evaluation
 ├── reports/
 │   ├── baseline_metrics.json             # earlier 1,000-image run (to be regenerated)
-│   ├── inference_demo.jsonl              # records written by the demo
+│   ├── inference_demo.jsonl              # records written by the Lab 04 demo
+│   ├── validation_demo.jsonl             # Lab 05 validation trace
 │   └── runs/detect/
 │       ├── YOLOv8s/                      # training curves, results.csv, args.yaml
 │       └── val/                          # test-sample evaluation, confusion matrix
 ├── src/
 │   ├── baseline_pipeline.py              # end-to-end baseline as one script (see note below)
-│   └── inference_demo.py                 # one-image inference demo
+│   ├── inference_demo.py                 # Lab 04 demo + Lab 05 validated demo
+│   └── input_validation.py               # Lab 05 request validator
+├── tests/
+│   └── test_input_validation.py          # Lab 05 tests (standard library only)
 ├── requirements.txt
 └── README.md
 ```
@@ -233,6 +239,37 @@ This creates **`reports/inference_demo.jsonl`** with two lines:
 The path is drawn in
 [`docs/inference_architecture.drawio`](docs/inference_architecture.drawio);
 open it at <https://app.diagrams.net>.
+
+## Input validation (Lab 05)
+
+Before prediction, each request is checked against
+[`config/input_contract.json`](config/input_contract.json) by
+[`src/input_validation.py`](src/input_validation.py). The checks read only the
+values in the request (`input_ref`, `format`, `width`, `height`, `source`) and
+the runtime preprocessing identity; they do not open or decode the file.
+Decoding is still checked inside `project_predict()`.
+
+| Rule | Kind | Fails as | Why |
+|---|---|---|---|
+| `input_reference_present` | structural | error | prediction needs a reference |
+| `format_supported` | structural | error | normal input is JPG or PNG (Lab 03) |
+| `dimensions_minimum` | structural | error | the app rejects images under 32 px |
+| `source_registered` | project-specific | error | an unknown source cannot be traced |
+| `source_evaluated` | review | warning | frames from unevaluated sources go to the officer (Lab 03 failure cases) |
+| `preprocessing_identity` | structural | error | runtime `letterbox640-v1` must match the contract |
+
+`pass` calls `project_predict()`, `warning` returns `route_for_review` without
+predicting, and `error` returns `reject_input`. The most severe result wins:
+error > warning > pass.
+
+```bash
+python src/inference_demo.py                        # writes reports/validation_demo.jsonl
+python -m unittest tests/test_input_validation.py
+```
+
+Each line of the trace keeps one `request_id` with the checks
+(`rule`, `observed`, `status`, `action`), `validation_status`, `action`,
+`prediction_called` and the prediction outcome.
 
 ## Next steps
 
