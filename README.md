@@ -240,7 +240,7 @@ The path is drawn in
 [`docs/inference_architecture.drawio`](docs/inference_architecture.drawio);
 open it at <https://app.diagrams.net>.
 
-## Input validation (Lab 05)
+## Input validation
 
 Before prediction, each request is checked against
 [`config/input_contract.json`](config/input_contract.json) by
