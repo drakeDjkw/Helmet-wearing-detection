@@ -18,56 +18,72 @@ The order of this table must match the class IDs in the label files. It is also 
 
 ## Dataset
 
-Roboflow export `WearHelmetDetection.v1i.yolov8`, in YOLO format (one `.txt` label file per image, with normalised `class x_center y_center width height`). Original source: **[SOURCE TO CONFIRM — see `data/WearHelmetDetection.v1i.yolov8/README.roboflow.txt`]**.
+Roboflow export `WearHelmetDetection.v1i.yolov8`, in YOLO format (one `.txt` label file per image, with normalised `class x_center y_center width height`). The class names are read from the export's `data.yaml`.
+
+The file names show two sources:
+
+- **Public hard-hat images** (`hard_hat_workers<N>_png.rf.<hash>.jpg`). Original source and licence: **[TO CONFIRM — see `data/WearHelmetDetection.v1i.yolov8/README.roboflow.txt`]**.
+- **Web images collected by the author** (`helmet_with_head_<N>`, `head_without_helmet_<N>`, `helmet_only_<N>`). A Colab script used `icrawler` to send 48 search phrases (English, Russian, Chinese) to Bing and Baidu. It downloaded 9,348 images, and perceptual-hash de-duplication (Hamming distance ≤ 5, across all classes) kept 5,927. The folder name was only a hint: every image was annotated with all three classes in Roboflow (Auto Label, then manual review). These images are for research use only and must not be redistributed.
 
 The dataset is not stored in this repository. Download it and place it at `data/WearHelmetDetection.v1i.yolov8/`.
 
+**Removed source.** Files whose names are only digits (`^\d+_jpg\.rf\.`) carried wrong labels. The notebook moves them out of `valid` (1,417 images) and `test` (710 images) into `data/WearHelmetDetection.v1i.yolov8_removed_source/` before any analysis. The training split is **not** filtered by this rule yet.
+
+After that step:
+
 | Split | Images | Objects | Head_without_helmet | Helmet_only | Helmet_with_head |
 |---|---|---|---|---|---|
-| Train | 2,564 | 12,233 | 3,050 (24.9%) | 317 (2.6%) | 8,866 (72.5%) |
-| Valid | 986 | 4,766 | 1,310 (27.5%) | 93 (2.0%) | 3,363 (70.6%) |
-| Test | 394 | 1,677 | 326 (19.4%) | 34 (2.0%) | 1,317 (78.5%) |
+| Train | 7,262 | 19,715 | 4,821 (24.5%) | 3,476 (17.6%) | 11,418 (57.9%) |
+| Valid | 1,666 | 5,923 | 1,581 (26.7%) | 504 (8.5%) | 3,838 (64.8%) |
+| Test | 1,026 | 2,788 | 581 (20.8%) | 546 (19.6%) | 1,661 (59.6%) |
+| **Total** | **9,954** | **28,426** | 6,983 (24.6%) | 4,526 (15.9%) | 16,917 (59.5%) |
 
 Findings from the exploratory analysis (`notebook/Helmet_wear_detection.ipynb`):
 
-- **Class imbalance.** `Helmet_with_head` makes up over 70% of objects, while `Helmet_only` is only about 2%.
-- **Objects per image.** The mean is 4.77, the median is 3 and the maximum is 42 (train split). Many scenes contain several small, overlapping heads.
-- **Image size.** All sampled images are about 416 × 416 px (415–416 px on each side).
-- **No empty images.** Every training image contains at least one object, so the model has never seen a scene without people.
-- **Label integrity.** Every image has a label file and every label file has an image.
+- **Class imbalance.** `Helmet_with_head` is the largest class in every split (58–65% of objects). The share of `Helmet_only` varies between splits: 17.6% in train, 8.5% in validation, 19.6% in test.
+- **Objects per image.** In the training split the mean is 2.71, the median is 1 and the maximum is 97. The largest group of images (38.0%) contains exactly one object.
+- **Empty images.** 1,362 training images (18.8%) have an empty label file, so the model also sees scenes without any of the three classes. Validation and test contain 151 and 160 such images.
+- **Image size.** In a random sample of 3,000 training images, widths range from 320 to 7,360 px and heights from 320 to 6,000 px, with 829 distinct sizes. The most common are 416 × 415 and 416 × 416 (the hard-hat images), then 1,500 × 1,101 and 800 × 800. YOLO letterboxes every image to 640 px.
+- **Label integrity.** Every image has a label file, no label line is malformed, and every class ID is valid. (The training image folder holds one extra non-image file, which is ignored.)
 
 ## Baseline
 
-The baseline uses a fixed-seed random sample (seed 42) of each split. Details are in [`docs/split_strategy.md`](docs/split_strategy.md).
+The baseline uses a fixed-seed random sample (`random_state=42`, drawn from a sorted file list) of each split. The original split boundaries are kept.
 
 | Split | Sample | Objects | Head_without_helmet | Helmet_only | Helmet_with_head |
 |---|---|---|---|---|---|
-| Train | 1,000 | 4,849 | 25.5% | 2.1% | 72.5% |
-| Val | 200 | 991 | 24.5% | 2.8% | 72.7% |
-| Test | 200 | 882 | 20.9% | 2.2% | 77.0% |
+| Train | 3,000 | 8,074 | 25.8% (full 24.5%) | 16.6% (full 17.6%) | 57.5% (full 57.9%) |
+| Val | 500 | 1,910 | 26.2% (full 26.7%) | 9.9% (full 8.5%) | 63.9% (full 64.8%) |
+| Test | 300 | 914 | 24.2% (full 20.8%) | 27.4% (full 19.6%) | 48.5% (full 59.6%) |
 
-**Model:** YOLOv8s (pretrained `yolov8s.pt`), 25 epochs, image size 640, batch 16, seed 42. It was trained on an Apple M4 (MPS) in about 44 minutes.
+The training and validation samples stay within 1.5 percentage points of their splits. The test sample departs further (−11.1 points for `Helmet_with_head`), because whole images are drawn and a few crowded images shift a 300-image sample. Ultralytics' scan registered 2,999 of the 3,000 training images (570 without objects), and 48 of the 300 test images have no objects.
 
-### Test results (200 images, 882 objects)
+**Model:** YOLOv8s (pretrained `yolov8s.pt`, COCO head replaced by a 3-class head), 25 epochs, image size 640, batch 16, seed 42, deterministic, mixed precision. `optimizer=auto` chose AdamW (lr 0.001429, momentum 0.9), with a 3-epoch warm-up and linear decay. Default Ultralytics augmentation (mosaic, switched off for the last 10 epochs; translate 0.1; scale 0.5; horizontal flip 0.5; HSV 0.015 / 0.7 / 0.4). Trained on an Apple M4 (MPS) in 2.79 hours. The best checkpoint by fitness (0.1 × mAP50 + 0.9 × mAP50-95) is **epoch 24**: validation mAP50 0.788, mAP50-95 0.595.
 
-| Class | Instances | Precision | Recall | mAP50 | mAP50-95 |
-|---|---|---|---|---|---|
-| **All** | 882 | 0.671 | 0.634 | 0.660 | 0.506 |
-| Head_without_helmet | 184 | 0.847 | 0.783 | 0.865 | 0.653 |
-| Helmet_only | 19 | 0.260 | 0.211 | 0.157 | 0.129 |
-| Helmet_with_head | 679 | 0.907 | 0.909 | 0.957 | 0.734 |
+### Test results (300 images, 914 objects)
+
+Scored once with `best.pt` on the test sample (`split="test"`).
+
+| Class | Images | Instances | Precision | Recall | mAP50 | mAP50-95 |
+|---|---|---|---|---|---|---|
+| **All** | 300 | 914 | 0.795 | 0.800 | 0.817 | 0.604 |
+| Head_without_helmet | 58 | 221 | 0.754 | 0.735 | 0.748 | 0.495 |
+| Helmet_only | 72 | 250 | 0.758 | 0.780 | 0.795 | 0.597 |
+| Helmet_with_head | 164 | 443 | 0.873 | 0.885 | 0.909 | 0.721 |
 
 | Model size | Inference time | Throughput |
 |---|---|---|
-| 21.5 MB | 2.67 ms per image (MPS, batched evaluation, model inference only) | 54.5 FPS (including pre- and post-processing) |
+| 21.5 MB | 213.2 ms per image (CPU of the Apple M4, batched evaluation, model inference only) | about 4.7 FPS (213.7 ms including pre- and post-processing) |
 
-Source: [`reports/baseline_metrics.json`](reports/baseline_metrics.json).
+The test evaluation did not set a device, so it ran on the CPU. During validation on MPS, inference took 9.8 ms and post-processing 20.9 ms per image (about 32 FPS).
+
+Sources: notebook output, `reports/runs/detect/YOLOv8s/results.csv` (training) and `reports/runs/detect/val/` (test curves and confusion matrix).
 
 What the results show:
 
-- **The two classes that matter for safety are detected well.** `Helmet_with_head` reaches 0.957 mAP50 and `Head_without_helmet` reaches 0.865.
-- **Violations are still missed.** Of the 184 test heads without a helmet, 32 were missed and 7 were labelled `Helmet_with_head`. That is a false-negative rate of 21.2%. This is the failure the [acceptance check](docs/project_decisions.md) targets.
-- **`Helmet_only` is not usable yet.** It has 0.157 mAP50 on 19 test boxes, and it pulls the overall mAP50 down. The first version of the app does not use it for alerts.
+- **Heads with a helmet are detected best** (0.909 mAP50). `Helmet_only`, which was unusable with the earlier data (0.157 mAP50 on 19 boxes), now reaches 0.795 on 250 test boxes.
+- **The violation class is now the weakest** (0.748 mAP50, 0.495 mAP50-95). From the test confusion matrix: of 221 heads without a helmet, 164 were detected correctly, 45 were missed as background and 12 were labelled `Helmet_with_head`. That is a **false-negative rate of 57 / 221 = 25.8%**, against the proposed acceptance threshold of 10% ([decisions](docs/project_decisions.md)). The model does not meet it yet.
+- **`Helmet_only` stays out of alerts by design.** A helmet that nobody wears says nothing about whether a worker is protected, so the app shows these boxes but does not count them.
 
 ## Project structure
 
@@ -94,11 +110,13 @@ Helmet-wearing-detection/
 ├── notebook/
 │   └── Helmet_wear_detection.ipynb       # EDA, sampling, training, evaluation
 ├── reports/
-│   ├── baseline_metrics.json             # baseline test metrics
+│   ├── baseline_metrics.json             # earlier 1,000-image run (to be regenerated)
 │   ├── inference_demo.jsonl              # records written by the demo
-│   └── runs/detect/                      # curves, confusion matrices, predictions
+│   └── runs/detect/
+│       ├── YOLOv8s/                      # training curves, results.csv, args.yaml
+│       └── val/                          # test-sample evaluation, confusion matrix
 ├── src/
-│   ├── baseline_pipeline.py              # end-to-end baseline as one script
+│   ├── baseline_pipeline.py              # end-to-end baseline as one script (see note below)
 │   └── inference_demo.py                 # one-image inference demo
 ├── requirements.txt
 └── README.md
@@ -108,7 +126,7 @@ Helmet-wearing-detection/
 
 ### Install
 
-Python 3.10–3.12 is recommended. The webcam page needs PyAV (`av`), which may not yet have ready-made packages for Python 3.14.
+The baseline was trained with Python 3.14, Ultralytics 8.4.92 and PyTorch 2.14.1. For the app, Python 3.10–3.12 is recommended, because the webcam page needs PyAV (`av`), which may not yet have ready-made packages for Python 3.14.
 
 ```bash
 python3.12 -m venv .venv
@@ -119,11 +137,15 @@ python -m pip install -r app/requirements-app.txt
 
 ### Train and evaluate the baseline
 
+The reported baseline was produced by **`notebook/Helmet_wear_detection.ipynb`**. Run it top to bottom: it removes the mislabelled source, runs the EDA, draws the 3,000 / 500 / 300 sample into `data/HWD_SAMPLE/`, writes `notebook/data.yaml`, trains, and evaluates on the test sample.
+
+`src/baseline_pipeline.py` runs the same steps as one script, but it does **not** yet remove the mislabelled source, and its defaults (1,000 / 200 / 200 images, 10 epochs, evaluation on MPS) differ from the notebook. To get close to the notebook settings:
+
 ```bash
-python src/baseline_pipeline.py --epochs 25 --run-name YOLOv8s_e25
+python src/baseline_pipeline.py --epochs 25 --n-train 3000 --n-val 500 --n-test 300 --run-name YOLOv8s_e25
 ```
 
-This runs every step: sampling, writing `data.yaml`, training, test evaluation, saving metrics and drawing a prediction grid. Give each run its own `--run-name`, so its results are not overwritten.
+Give each run its own `--run-name`, so its results are not overwritten.
 
 | Option | Default | Purpose |
 |---|---|---|
@@ -172,7 +194,7 @@ Each frame gets one of four statuses, following [`docs/project_decisions.md`](do
 | **No people detected** | No heads were found. This is never reported as compliant |
 | **Compliant** | All detected heads wear helmets |
 
-Inputs that cannot be read (empty files, non-image files, images smaller than 32 px) are rejected with a reason. Both cutoffs are provisional and are set with sliders in the app.
+Detections below the review cutoff are discarded. Inputs that cannot be read (empty files, non-image files, images or frames smaller than 32 px) are rejected with a reason. Both cutoffs (defaults 0.50 and 0.25) are provisional and are set with sliders in the app. The video page processes every 5th frame by default and merges flagged frames with the same status that are less than 1 s apart into one event.
 
 ## inference demo
 
@@ -214,10 +236,12 @@ open it at <https://app.diagrams.net>.
 
 ## Next steps
 
-- Check for leakage between splits: whether copies of the same source photo (`hard_hat_workers<N>`) appear in both training and test.
-- Tune the alert and review cutoffs on the validation sample, aiming for the [acceptance threshold](docs/project_decisions.md) on missed violations.
-- Train on the full training set (2,564 images), and compare YOLOv8n with YOLOv8s and 416 px with 640 px input.
-- Measure false alarms on frames without people, and test on images from real site cameras.
+- Apply the mislabelled-source filter to the training split too, and add the filter to `src/baseline_pipeline.py`.
+- Check for leakage between splits: whether copies of the same source photo (`hard_hat_workers<N>`, or one web photo exported several times) appear in both training and test.
+- Tune the alert and review cutoffs on the validation sample, aiming for the [acceptance threshold](docs/project_decisions.md) of under 10% missed violations (now 25.8%).
+- Train on the full training set (7,262 images), and compare YOLOv8n with YOLOv8s and 416 px with 640 px input.
+- Measure end-to-end single-frame time on the target device, false alarms on frames without people, and results on images from real site cameras.
+- Update `docs/split_strategy.md`, `docs/project_decisions.md` and `reports/baseline_metrics.json`, which still describe the earlier 1,000-image run.
 
 ## Acknowledgements
 
