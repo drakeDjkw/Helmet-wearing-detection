@@ -1,6 +1,6 @@
 """Lab 04: connect one project input to a traceable response.
 
-Helmet Wearing Detection. One construction-site image goes through the Lab 02
+Helmet Wearing Detection. One construction-site image goes through
 YOLOv8s baseline and the same status rules the Streamlit app uses
 (app/helmet_utils.py). The response and a simulated "unavailable" attempt are
 saved to reports/inference_demo.jsonl.
@@ -48,7 +48,7 @@ _model = None
 
 
 def load_model():
-    """Load the Lab 02 baseline weights once."""
+    """Load the baseline weights once."""
     global _model
     if _model is None:
         if WEIGHTS is None or not WEIGHTS.is_file():
@@ -61,7 +61,7 @@ def load_model():
 
 
 def project_predict(input_ref: str) -> dict[str, Any]:
-    """Return one prediction by reusing the Lab 02 model and the app's rules.
+    """Return one prediction by reusing the model and the app's rules.
 
     Shape: {"result": {...}, "needs_review": bool}
     """
