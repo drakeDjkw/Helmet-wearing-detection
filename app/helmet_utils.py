@@ -248,6 +248,20 @@ def to_rgb(image_bgr: np.ndarray) -> np.ndarray:
     return cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB)
 
 
+def draw_alert(image_bgr: np.ndarray, text: str) -> np.ndarray:
+    """Red border and a red banner at the bottom, drawn in place on a BGR image."""
+    h, w = image_bgr.shape[:2]
+    red = CLASS_COLORS_BGR[HEAD_WITHOUT]
+    thick = max(6, min(w, h) // 60)
+    cv2.rectangle(image_bgr, (0, 0), (w - 1, h - 1), red, thick)
+    scale = max(0.5, min(w, h) / 900)
+    (tw, th), _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, scale, 2)
+    cv2.rectangle(image_bgr, (0, h - th - 20), (min(w, tw + 20), h), red, -1)
+    cv2.putText(image_bgr, text, (10, h - 10), cv2.FONT_HERSHEY_SIMPLEX, scale,
+                (255, 255, 255), 2, cv2.LINE_AA)
+    return image_bgr
+
+
 # ==========================================
 # Streamlit widgets shared by all pages
 # ==========================================
@@ -269,6 +283,35 @@ def threshold_controls(key_prefix: str, disabled: bool = False):
     return alert, review
 
 
+def alert_controls(key_prefix: str, disabled: bool = False, sound: bool = True):
+    """Settings for turning per-frame violations into alerts (see alerting.py).
+
+    Returns (window, min_hits, cooldown_s, sound_on).
+    """
+    with st.expander("Alert settings", expanded=False):
+        window = st.slider("Processed frames to look at", 1, 15, 5, key=f"{key_prefix}_win",
+                           disabled=disabled,
+                           help="The alert decision uses this many of the most recent processed frames.")
+        if window > 1:
+            min_hits = st.slider("Violating frames needed to raise an alert", 1, window,
+                                 min(3, window), key=f"{key_prefix}_hits", disabled=disabled,
+                                 help="Higher values give fewer false alarms but a later alert.")
+        else:
+            min_hits = 1
+            st.caption("With one frame, every violating frame raises an alert.")
+        cooldown_s = st.slider("Pause after an alert ends (s)", 0, 60, 10,
+                               key=f"{key_prefix}_cool", disabled=disabled,
+                               help="No new alert is raised for this long after the previous one cleared.")
+        sound_on = False
+        if sound:
+            sound_on = st.toggle("Play a sound when an alert is raised", value=True,
+                                 key=f"{key_prefix}_sound", disabled=disabled,
+                                 help="Some browsers block sound until you have clicked on the page.")
+        st.caption("An alert clears when none of the recent processed frames shows a violation. "
+                   "Uncertain detections never raise an alert; they are marked 'check by eye'.")
+    return window, min_hits, cooldown_s, sound_on
+
+
 def show_status(fr: FrameResult) -> None:
     msg = STATUS_TEXT[fr.status]
     if fr.status == VIOLATION:
@@ -276,8 +319,8 @@ def show_status(fr: FrameResult) -> None:
     elif fr.status == UNCERTAIN:
         st.warning(f"**{msg}** — {fr.n_uncertain} head(s) need review")
     elif fr.status == NO_PEOPLE:
-        st.info(f"**{msg}.** This is not a compliance result: the model was "
-                "trained only on images that contain people.")
+        st.info(f"**{msg}.** This is not a compliance result: workers may be "
+                "present whose heads the model did not find.")
     else:
         st.success(f"**{msg}** — {fr.n_with} head(s)")
 
@@ -286,5 +329,5 @@ def show_status(fr: FrameResult) -> None:
     c2.metric("With helmet", fr.n_with)
     c3.metric("Check by eye", fr.n_uncertain)
     c4.metric("Helmet only*", fr.n_helmet_only)
-    st.caption("*Helmet_only is shown but not used for alerts, because its test "
-               "accuracy is still too low (see docs/project_decisions.md).")
+    st.caption("*Helmet_only is shown but not used for alerts or counts: a helmet that "
+               "nobody wears says nothing about whether a worker is protected.")
