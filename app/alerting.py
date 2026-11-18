@@ -22,7 +22,7 @@ This module has no Streamlit or model imports, so it can be tested on its own.
 from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Deque, List, Optional, Tuple
+from typing import Callable, Deque, List, Optional, Tuple
 
 import io
 import math
@@ -55,8 +55,9 @@ class AlertEvent:
     def duration_s(self, now: float) -> float:
         return (self.ended_ts if self.ended_ts is not None else now) - self.raised_ts
 
-    def as_row(self, now: float) -> dict:
-        fmt = lambda ts: datetime.fromtimestamp(ts).strftime("%H:%M:%S")
+    def as_row(self, now: float, time_fmt: Optional[Callable[[float], str]] = None) -> dict:
+        """One log row. `time_fmt` turns a timestamp into text (default: wall-clock HH:MM:SS)."""
+        fmt = time_fmt or (lambda ts: datetime.fromtimestamp(ts).strftime("%H:%M:%S"))
         return {
             "event": self.id,
             "raised": fmt(self.raised_ts),
@@ -128,8 +129,15 @@ class AlertTracker:
             return RAISED
         return None
 
-    def rows(self, now: float) -> List[dict]:
-        return [e.as_row(now) for e in self.events]
+    def rows(self, now: float, time_fmt: Optional[Callable[[float], str]] = None) -> List[dict]:
+        return [e.as_row(now, time_fmt) for e in self.events]
+
+    def close(self, ts: float) -> None:
+        """End an alert that is still active, e.g. when a video ends."""
+        ev = self.current
+        if ev is not None:
+            ev.ended_ts = ts
+            self._last_end_ts = ts
 
     def trim_snapshots(self) -> None:
         """Keep snapshots only for the newest `max_snapshots` events (bounds memory)."""

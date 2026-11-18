@@ -4,7 +4,6 @@ import time
 from pathlib import Path
 
 import av
-import cv2
 import pandas as pd
 import streamlit as st
 from streamlit_webrtc import WebRtcMode, webrtc_streamer
@@ -28,21 +27,7 @@ st.write("Detect helmet use from a webcam. Select the camera and press **Start**
 model = hu.load_model()
 alert_conf, review_conf = hu.threshold_controls("rt")
 
-with st.expander("Alert settings", expanded=False):
-    window = st.slider("Frames to look at", 1, 15, 5,
-                       help="The alert decision uses this many of the most recent processed frames.")
-    if window > 1:
-        min_hits = st.slider("Violating frames needed to raise an alert", 1, window, min(3, window),
-                             help="Higher values give fewer false alarms but a later alert.")
-    else:
-        min_hits = 1
-        st.caption("With one frame, every violating frame raises an alert.")
-    cooldown_s = st.slider("Pause after an alert ends (s)", 0, 60, 10,
-                           help="No new alert is raised for this long after the previous one cleared.")
-    sound_on = st.toggle("Play a sound when an alert is raised", value=True,
-                         help="Some browsers block sound until you have clicked on the page.")
-    st.caption("An alert clears when none of the recent frames shows a violation. "
-               "Uncertain detections never raise an alert; they are marked 'check by eye'.")
+window, min_hits, cooldown_s, sound_on = hu.alert_controls("rt")
 
 
 class SharedState:
@@ -69,20 +54,6 @@ with state.lock:
     state.tracker.configure(window, min_hits, cooldown_s)
 
 
-def draw_alert(image, event: alerting.AlertEvent, now: float):
-    """Red frame border and a bottom banner while an alert is active (BGR, in place)."""
-    h, w = image.shape[:2]
-    thick = max(6, min(w, h) // 60)
-    cv2.rectangle(image, (0, 0), (w - 1, h - 1), (0, 0, 230), thick)
-    text = f"ALERT #{event.id}: worker without helmet  ({event.duration_s(now):.0f} s)"
-    scale = max(0.5, min(w, h) / 900)
-    (tw, th), _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, scale, 2)
-    cv2.rectangle(image, (0, h - th - 20), (min(w, tw + 20), h), (0, 0, 230), -1)
-    cv2.putText(image, text, (10, h - 10), cv2.FONT_HERSHEY_SIMPLEX, scale,
-                (255, 255, 255), 2, cv2.LINE_AA)
-    return image
-
-
 def video_frame_callback(frame: av.VideoFrame) -> av.VideoFrame:
     t0 = time.time()
     image = frame.to_ndarray(format="bgr24")         # BGR, as the model expects
@@ -101,7 +72,8 @@ def video_frame_callback(frame: av.VideoFrame) -> av.VideoFrame:
                                       max_conf=max(confs, default=0.0))
         event = state.tracker.current
         if event is not None:
-            draw_alert(out, event, now)
+            hu.draw_alert(out, f"ALERT #{event.id}: worker without helmet  "
+                               f"({event.duration_s(now):.0f} s)")
             if change == alerting.RAISED:
                 event.snapshot = out.copy()           # the frame that raised the alert
                 state.tracker.trim_snapshots()
