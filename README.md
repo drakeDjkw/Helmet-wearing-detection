@@ -183,7 +183,7 @@ To use weights stored somewhere else, set `HELMET_MODEL_PATH=/path/to/best.pt`. 
 |---|---|---|
 | Image Detection | JPG / PNG photo | Annotated image, frame status, detection table |
 | Video Detection | MP4 / MOV / AVI | Annotated video and a list of moments to review |
-| Realtime Detection | Webcam | Live annotated stream with frame status |
+| Realtime Detection | Webcam | Live annotated stream with frame status, alerts (red border, sound), alert log with snapshots and CSV download |
 
 Each frame gets one of four statuses, following [`docs/project_decisions.md`](docs/project_decisions.md):
 
@@ -195,6 +195,8 @@ Each frame gets one of four statuses, following [`docs/project_decisions.md`](do
 | **Compliant** | All detected heads wear helmets |
 
 Detections below the review cutoff are discarded. Inputs that cannot be read (empty files, non-image files, images or frames smaller than 32 px) are rejected with a reason. Both cutoffs (defaults 0.50 and 0.25) are provisional and are set with sliders in the app. The video page processes every 5th frame by default and merges flagged frames with the same status that are less than 1 s apart into one event.
+
+**Realtime alerts** (`app/alerting.py`). One frame is not enough to raise an alert, because predictions can flicker between frames. An alert is raised when at least 3 of the last 5 processed frames are violations, stays active while violations continue (one alert per event, not per frame), and clears when none of the last 5 frames is a violation. After an alert clears, no new one is raised for 10 s. All three values can be changed under *Alert settings*. When an alert is raised, the video gets a red border and banner, a sound plays (optional), and a snapshot is saved. The alert log records for each event the time, duration, alert latency (first violating frame to alert), the most heads without a helmet and the highest confidence, and can be downloaded as CSV after the camera is stopped. Uncertain detections never raise an alert.
 
 ## inference demo
 
