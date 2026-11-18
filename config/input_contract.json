@@ -1,0 +1,91 @@
+{
+  "contract_id": "helmet-input-contract",
+  "contract_version": "input-contract-v1",
+  "project": "Helmet Wearing Detection (YOLOv8s baseline-v1)",
+  "scope": "Request-level checks only. The validator reads the fields supplied in the request (input_ref, format, width, height, source) and compares the runtime preprocessing identity with this contract. It does not open the referenced file, prove that it exists or decode it. Decoding is checked later, inside project_predict(), by app/helmet_utils.decode_image_bytes().",
+
+  "decision": {
+    "severity_order": ["pass", "warning", "error"],
+    "overall_action": {
+      "pass": "predict",
+      "warning": "route_for_review",
+      "error": "reject_input"
+    },
+    "check_action": {
+      "pass": "continue",
+      "warning": "route_for_review",
+      "error": "reject_input"
+    }
+  },
+
+  "preprocessing": {
+    "expected_id": "letterbox640-v1",
+    "meaning": "cv2.imdecode to 3-channel BGR, then Ultralytics letterbox to imgsz=640 and /255 scaling inside model.predict(). No training augmentation at prediction time.",
+    "defined_in": "src/inference_demo.py (PREPROCESSING_ID); never taken from the request"
+  },
+
+  "rules": {
+    "input_reference_present": {
+      "kind": "structural",
+      "severity_on_fail": "error",
+      "checks": "input_ref is a non-empty string. This does not mean the file was found.",
+      "basis": "project_predict() needs a reference to read; Lab 03 'invalid input' case."
+    },
+    "format_supported": {
+      "kind": "structural",
+      "severity_on_fail": "error",
+      "allowed": ["jpg", "jpeg", "png"],
+      "checks": "Declared format, lower-cased, is one of the allowed values.",
+      "basis": "Lab 03 required behavior: a normal input is a readable JPG or PNG image of a work area (docs/project_decisions.md)."
+    },
+    "dimensions_minimum": {
+      "kind": "structural",
+      "severity_on_fail": "error",
+      "min_width": 32,
+      "min_height": 32,
+      "checks": "Declared width and height are integers at or above the minimum.",
+      "basis": "app/helmet_utils.check_frame() rejects images under 32 px on either side; the app and the Lab 04 demo use the same limit."
+    },
+    "source_registered": {
+      "kind": "project-specific",
+      "severity_on_fail": "error",
+      "checks": "Declared source is one of the sources listed below.",
+      "basis": "A result can only be interpreted when we know where the image came from; an unknown source cannot be traced or scored."
+    },
+    "source_evaluated": {
+      "kind": "review",
+      "severity_on_fail": "warning",
+      "checks": "The registered source has been evaluated against labelled data. Evaluated only when source_registered passes.",
+      "basis": "Lab 03 failure-case table: site frames differ from the training photos (CCTV angle, night, low resolution), so frames from unchecked sources are marked 'not evaluated' and go to the safety officer instead of being reported automatically."
+    },
+    "preprocessing_identity": {
+      "kind": "structural",
+      "severity_on_fail": "error",
+      "checks": "The runtime preprocessing identifier equals preprocessing.expected_id.",
+      "basis": "The baseline metrics were measured with 640 px letterbox input; a different transform would make those numbers meaningless for this prediction."
+    }
+  },
+
+  "sources": {
+    "dataset-test-sample": {
+      "evaluated": true,
+      "description": "Images from the held-out test split of WearHelmetDetection.v1i.yolov8",
+      "evidence": "reports/baseline_metrics.json, reports/runs/detect/val/"
+    },
+    "dataset-valid-sample": {
+      "evaluated": true,
+      "description": "Images from the validation split of WearHelmetDetection.v1i.yolov8",
+      "evidence": "reports/runs/detect/YOLOv8s/results.csv"
+    },
+    "app-image-upload": {
+      "evaluated": false,
+      "description": "Still image uploaded by the safety officer in the Streamlit app; camera and angle unknown",
+      "evidence": null
+    },
+    "app-webcam": {
+      "evaluated": false,
+      "description": "Frame from the realtime webcam page of the Streamlit app",
+      "evidence": null
+    }
+  }
+}
