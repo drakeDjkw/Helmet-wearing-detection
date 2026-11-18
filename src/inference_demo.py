@@ -1,11 +1,16 @@
-"""Lab 04: connect one project input to a traceable response.
+"""Lab 04 + Lab 05: validate a request, then connect it to a traceable response.
 
-Helmet Wearing Detection. One construction-site image goes through
-YOLOv8s baseline and the same status rules the Streamlit app uses
-(app/helmet_utils.py). The response and a simulated "unavailable" attempt are
-saved to reports/inference_demo.jsonl.
+Helmet Wearing Detection. Lab 05 (default): three requests (pass, error,
+warning) go through src/input_validation.py first. Only a passing request
+reaches project_predict(), which runs the YOLOv8s baseline and the same status
+rules the Streamlit app uses (app/helmet_utils.py). The combined trace is
+saved to reports/validation_demo.jsonl.
 
 Run from the repository root:
+    python src/inference_demo.py
+
+Lab 04 (one image, plus a simulated "unavailable" attempt, written to
+reports/inference_demo.jsonl):
     python src/inference_demo.py --input-ref data/WearHelmetDetection.v1i.yolov8/test/images/hard_hat_workers1116_png.rf.7cc65945da90d7396b636cd982363c8a.jpg
 """
 
@@ -24,8 +29,19 @@ sys.path.insert(0, str(ROOT / "app"))
 
 import helmet_utils as hu  # noqa: E402  same input checks and status rules as the app
 
+sys.path.insert(0, str(ROOT / "src"))
+from input_validation import load_contract, route_request  # noqa: E402
+
 MODEL_VERSION = "baseline-v1"   # YOLOv8s, 25 epochs (test mAP50 0.660)
 RULE_VERSION = "decision-v1"    # status rules in app/helmet_utils.py, cutoffs below
+
+# Runtime identity of the deterministic preprocessing used for prediction.
+# letterbox640-v1 = cv2.imdecode to 3-channel BGR (helmet_utils.decode_image_bytes),
+# then Ultralytics letterbox resize to IMGSZ=640 and /255 scaling inside
+# model.predict(). Training augmentation (mosaic, flips, HSV) never runs here.
+# Defined beside the inference code and checked against config/input_contract.json;
+# it is never read from the incoming request.
+PREPROCESSING_ID = "letterbox640-v1"
 
 # Actions decided in Lab 03 (docs/project_decisions.md).
 NORMAL_ACTION = "show frame status to the safety officer; alert if VIOLATION"
@@ -130,6 +146,75 @@ def run_attempt(input_ref: str, *, simulate_unavailable: bool) -> dict[str, Any]
     }
 
 
+# ------------------------------------------------------------------
+# Lab 05: validation before prediction
+# ------------------------------------------------------------------
+LAB04_IMAGE = ("data/WearHelmetDetection.v1i.yolov8/test/images/"
+               "hard_hat_workers1116_png.rf.7cc65945da90d7396b636cd982363c8a.jpg")
+
+# One request per status. Values are what a caller would send; the validator
+# does not open the files.
+DEMO_CASES: list[tuple[str, dict[str, Any]]] = [
+    ("normal test image", {
+        "input_ref": LAB04_IMAGE, "format": "jpg", "width": 416, "height": 416,
+        "source": "dataset-test-sample",
+    }),
+    ("invalid request", {
+        # Missing reference and an unsupported format (errors), from an
+        # unevaluated source (warning): error must win.
+        "input_ref": "", "format": "gif", "width": 416, "height": 416,
+        "source": "app-image-upload",
+    }),
+    ("readable image from an unevaluated source", {
+        "input_ref": "uploads/site_a_gate_0815.jpg", "format": "jpg",
+        "width": 1280, "height": 720, "source": "app-image-upload",
+    }),
+]
+
+
+def predict_from_request(request: dict[str, Any]) -> dict[str, Any]:
+    """Adapter: route_request() passes the whole request, Lab 04 takes input_ref."""
+    return project_predict(request["input_ref"])
+
+
+def run_validated(case: str, request: dict[str, Any], contract: dict[str, Any]) -> dict[str, Any]:
+    request = {"request_id": str(uuid4()), **request}
+    record = route_request(request, predict_from_request, contract, PREPROCESSING_ID)
+
+    # What happens after prediction uses the Lab 04 actions.
+    if record["prediction_status"] == "returned":
+        needs_review = bool(record["prediction"].get("needs_review", False))
+        after = REVIEW_ACTION if needs_review else NORMAL_ACTION
+    elif record["prediction_status"] == "failed":
+        after = UNAVAILABLE_ACTION
+    else:
+        after = None
+
+    return {"case": case, **record,
+            "after_prediction_action": after,
+            "model_version": MODEL_VERSION,
+            "rule_version": RULE_VERSION}
+
+
+def run_lab05(output: Path) -> None:
+    contract = load_contract()
+    # Load the model before timing, so latency_ms measures one prediction.
+    try:
+        load_model()
+    except Exception as error:
+        print(f"model not loaded: {error}")
+
+    records = [run_validated(case, request, contract) for case, request in DEMO_CASES]
+    write_evidence(records, output)
+
+    for r in records:
+        failed = [c["rule"] for c in r["checks"] if c["status"] != "pass"]
+        print(f"{r['validation_status']:<8} {r['action']:<17} "
+              f"prediction_called={str(r['prediction_called']):<5} "
+              f"checks_not_passed={failed}  request_id={r['request_id']}")
+    print(f"Saved {len(records)} records to {output}")
+
+
 def write_evidence(records: list[dict[str, Any]], output: Path) -> None:
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(
@@ -141,18 +226,28 @@ def write_evidence(records: list[dict[str, Any]], output: Path) -> None:
 def main() -> None:
     global WEIGHTS
     parser = argparse.ArgumentParser()
-    parser.add_argument("--input-ref", required=True,
-                        help="Path to one site image, relative to the repository root")
+    parser.add_argument("--input-ref", default=None,
+                        help="Lab 04 mode: path to one site image, relative to the repository root")
     parser.add_argument("--weights", type=Path, default=None,
                         help="Trained weights (default: models/helmet_yolov8s.pt, "
                              "then reports/runs/detect/YOLOv8s/weights/best.pt)")
-    parser.add_argument("--output", default="reports/inference_demo.jsonl")
+    parser.add_argument("--output", default=None,
+                        help="Default: reports/validation_demo.jsonl "
+                             "(Lab 04 mode: reports/inference_demo.jsonl)")
     args = parser.parse_args()
 
     WEIGHTS = args.weights or next((p for p in WEIGHTS_CANDIDATES if p.is_file()), None)
 
-    # Load the model before timing, so latency_ms measures one prediction
-    # rather than the one-off model load.
+    default_out = "reports/inference_demo.jsonl" if args.input_ref else "reports/validation_demo.jsonl"
+    output = Path(args.output or default_out)
+    if not output.is_absolute():
+        output = ROOT / output
+
+    if args.input_ref is None:
+        run_lab05(output)
+        return
+
+    # Lab 04 mode, unchanged.
     try:
         load_model()
     except Exception as error:
@@ -162,9 +257,6 @@ def main() -> None:
         run_attempt(args.input_ref, simulate_unavailable=False),
         run_attempt(args.input_ref, simulate_unavailable=True),
     ]
-    output = Path(args.output)
-    if not output.is_absolute():
-        output = ROOT / output
     write_evidence(records, output)
 
     for record in records:
